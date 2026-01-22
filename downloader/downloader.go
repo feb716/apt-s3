@@ -3,87 +3,59 @@
 package downloader
 
 import (
-	"bufio"
+	"context"
 	"errors"
 	"os"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 )
 
-// Downloader tracks the region and Session and only recreates the Session
+// Downloader tracks the region and AWS config and only recreates the config
 // if the region has changed
 type Downloader struct {
 	region string
-	sess   *session.Session
+	cfg    aws.Config
+	ctx    context.Context
 }
 
-func New() *Downloader {
-	d := &Downloader{}
+func New(ctx context.Context) *Downloader {
+	d := &Downloader{
+		ctx: ctx,
+	}
 	return d
 }
 
-// getValue parses a string and returns the value assigned to a key
-func (d *Downloader) getValue(line string) string {
-	splitLine := strings.Split(line, " = ")
-	return (splitLine[len(splitLine)-1])
-}
+// loadCredentials sets up an AWS Config using credentials from environment variables
+// (OIDC_KEY_ID, OIDC_ACCESS_KEY, OIDC_SESSION_TOKEN), or falling back to the default
+// AWS credential chain (which includes AWS_PROFILE, ~/.aws/config, IAM roles, etc.)
+func (d *Downloader) loadCredentials(region string) (aws.Config, error) {
+	// Check OIDC environment variables
+	oidcKeyID := os.Getenv("OIDC_KEY_ID")
+	oidcAccessKey := os.Getenv("OIDC_ACCESS_KEY")
+	oidcSessionToken := os.Getenv("OIDC_SESSION_TOKEN")
 
-// credentialsFromFile loads AWS credentials from a non-standard path
-func (d *Downloader) credentialsFromFile(fileName string) (string, string, string, error) {
-	var accessKey, secretKey, token string
-
-	file, err := os.Open(fileName)
-	if err != nil {
-		return "", "", "", err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		switch {
-		case strings.Contains(scanner.Text(), "aws_access_key_id"):
-			accessKey = d.getValue(scanner.Text())
-		case strings.Contains(scanner.Text(), "aws_secret_access_key"):
-			secretKey = d.getValue(scanner.Text())
-		case strings.Contains(scanner.Text(), "aws_session_token"):
-			token = d.getValue(scanner.Text())
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return "", "", "", err
+	if oidcKeyID != "" && oidcAccessKey != "" {
+		// Use static credentials from OIDC environment variables
+		cfg, err := config.LoadDefaultConfig(d.ctx,
+			config.WithRegion(region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				oidcKeyID,
+				oidcAccessKey,
+				oidcSessionToken,
+			)),
+		)
+		return cfg, err
 	}
 
-	return accessKey, secretKey, token, nil
-}
-
-// loadCredentials sets up a Session using credentials found in /etc/apt/s3creds
-// or using the default configuration supported by AWS if /etc/apt/s3creds does
-// not exist
-func (d *Downloader) loadCredentials(region string) (*session.Session, error) {
-	var config aws.Config
-	var sess *session.Session
-
-	if _, err := os.Stat("/etc/apt/s3creds"); err == nil {
-		accessKey, secretKey, token, err := d.credentialsFromFile("/etc/apt/s3creds")
-		if err != nil {
-			return nil, err
-		}
-		config = aws.Config{
-			Region:      aws.String(region),
-			Credentials: credentials.NewStaticCredentials(accessKey, secretKey, token),
-		}
-	} else if os.IsNotExist(err) {
-		config = aws.Config{Region: aws.String(region)}
-	}
-	sess, err := session.NewSession(&config)
-
-	return sess, err
+	// Use default AWS credential chain (supports AWS_PROFILE, IAM roles, etc.)
+	cfg, err := config.LoadDefaultConfig(d.ctx, config.WithRegion(region))
+	return cfg, err
 }
 
 // parseUri takes an S3 URI s3://<bucket>.s3-<region>.amazonaws.com/key/file
@@ -113,22 +85,24 @@ func (d *Downloader) GetFileAttributes(s3Uri string) (string, int64, error) {
 
 	if d.region != region {
 		d.region = region
-		d.sess, err = d.loadCredentials(region)
+		d.cfg, err = d.loadCredentials(region)
 		if err != nil {
 			return "", -1, err
 		}
 	}
 
-	svc := s3.New(d.sess)
+	client := s3.NewFromConfig(d.cfg)
 
-	result, err := svc.GetObject(&s3.GetObjectInput{
+	result, err := client.GetObject(d.ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			return "", -1, errors.New(strings.Join(strings.Split(aerr.Error(), "\n"), " "))
+		var ae smithy.APIError
+		if errors.As(err, &ae) {
+			return "", -1, errors.New(strings.Join(strings.Split(ae.Error(), "\n"), " "))
 		}
+		return "", -1, err
 	}
 
 	return result.LastModified.Format("2006-01-02T15:04:05+00:00"), *result.ContentLength, nil
@@ -145,19 +119,22 @@ func (d *Downloader) DownloadFile(s3Uri string, path string) (string, error) {
 
 	if d.region != region {
 		d.region = region
-		d.sess, err = d.loadCredentials(region)
+		d.cfg, err = d.loadCredentials(region)
 		if err != nil {
 			return "", err
 		}
 	}
-	downloader := s3manager.NewDownloader(d.sess)
+
+	client := s3.NewFromConfig(d.cfg)
+	downloader := manager.NewDownloader(client)
 
 	f, err := os.Create(filename)
 	if err != nil {
 		return "", err
 	}
+	defer f.Close()
 
-	if _, err := downloader.Download(f, &s3.GetObjectInput{
+	if _, err := downloader.Download(d.ctx, f, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}); err != nil {

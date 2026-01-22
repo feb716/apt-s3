@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -19,7 +20,8 @@ var (
 )
 
 func main() {
-	m := method.New()
+	ctx := context.Background()
+	m := method.New(ctx)
 	programName := os.Args[0]
 
 	flag.Parse()

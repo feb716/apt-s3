@@ -41,15 +41,23 @@ export BUCKET_REGION=us-east-1
 echo "deb s3://${BUCKET_NAME}.s3-${BUCKET_REGION}.amazonaws.com/ stable main" > /etc/apt/sources.list.d/s3bucket.list
 ```
 
-### Credentials File
+### Credentials
 
-`/etc/apt/s3creds` is checked before using the default AWS credential methods. The file has a format similar to `~/.aws/credentials`, but profiles are ignored.
+`apt-s3` supports multiple credential methods in this order:
 
-```
-aws_access_key_id     = foo
-aws_secret_access_key = foobar123
-aws_session_token     = not-normally-needed
-```
+1. **OIDC Environment Variables** (Passed from https://github.com/zendesk/build-image/tree/main):
+   ```bash
+   export OIDC_KEY_ID=your-access-key-id
+   export OIDC_ACCESS_KEY=your-secret-access-key
+   export OIDC_SESSION_TOKEN=your-session-token
+   ```
+
+2. **Default AWS Credential Chain** (if OIDC vars not set):
+   - `AWS_PROFILE` environment variable
+   - `~/.aws/config` file
+   - IAM roles for EC2 instances
+   - IAM roles for ECS tasks
+   - Other standard AWS credential sources
 
 ### Interactive Usage
 
