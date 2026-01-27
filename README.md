@@ -41,15 +41,9 @@ export BUCKET_REGION=us-east-1
 echo "deb s3://${BUCKET_NAME}.s3-${BUCKET_REGION}.amazonaws.com/ stable main" > /etc/apt/sources.list.d/s3bucket.list
 ```
 
-### Credentials File
+### Credentials
 
-`/etc/apt/s3creds` is checked before using the default AWS credential methods. The file has a format similar to `~/.aws/credentials`, but profiles are ignored.
-
-```
-aws_access_key_id     = foo
-aws_secret_access_key = foobar123
-aws_session_token     = not-normally-needed
-```
+`apt-s3` uses the [default credential provider chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html) to find valid AWS credentials.
 
 ### Interactive Usage
 
@@ -85,6 +79,13 @@ export GITHUB_TOKEN=<your personal access token>
 # bumping the version programatically can be easily done with `awk`
 export VERSION=$(git describe --tags | awk -F. -v OFS=. '{ $3++ } 1') # use $1 for major/$2 for minor/$3 for patch
 make VERSION=$VERSION release
+```
+
+To create a pre-release for testing purposes:
+```bash
+export GITHUB_TOKEN=<your personal access token>
+export VERSION=0.1.0-alpha.1 # example pre-release tag
+make VERSION=$VERSION pre-release
 ```
 
 ## Contributing

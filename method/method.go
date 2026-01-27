@@ -4,6 +4,7 @@ package method
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -22,9 +23,9 @@ type Method struct {
 	Downloader *downloader.Downloader
 }
 
-func New() *Method {
+func New(ctx context.Context) *Method {
 	m := &Method{
-		Downloader: downloader.New(),
+		Downloader: downloader.New(ctx),
 	}
 	return m
 }
