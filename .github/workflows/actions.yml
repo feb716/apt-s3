@@ -11,8 +11,7 @@ jobs:
     strategy:
       matrix:
         go:
-          - "1.12"
-          - "1.11"
+          - "1.25"
     steps:
     - uses: zendesk/checkout@v2
       with:
