@@ -10,7 +10,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
@@ -31,29 +30,8 @@ func New(ctx context.Context) *Downloader {
 	return d
 }
 
-// loadCredentials sets up an AWS Config using credentials from environment variables
-// (OIDC_KEY_ID, OIDC_ACCESS_KEY, OIDC_SESSION_TOKEN), or falling back to the default
-// AWS credential chain (which includes AWS_PROFILE, ~/.aws/config, IAM roles, etc.)
+// Use default AWS credential chain
 func (d *Downloader) loadCredentials(region string) (aws.Config, error) {
-	// Check OIDC environment variables
-	oidcKeyID := os.Getenv("OIDC_KEY_ID")
-	oidcAccessKey := os.Getenv("OIDC_ACCESS_KEY")
-	oidcSessionToken := os.Getenv("OIDC_SESSION_TOKEN")
-
-	if oidcKeyID != "" && oidcAccessKey != "" {
-		// Use static credentials from OIDC environment variables
-		cfg, err := config.LoadDefaultConfig(d.ctx,
-			config.WithRegion(region),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				oidcKeyID,
-				oidcAccessKey,
-				oidcSessionToken,
-			)),
-		)
-		return cfg, err
-	}
-
-	// Use default AWS credential chain (supports AWS_PROFILE, IAM roles, etc.)
 	cfg, err := config.LoadDefaultConfig(d.ctx, config.WithRegion(region))
 	return cfg, err
 }
