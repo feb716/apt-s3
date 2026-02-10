@@ -11,7 +11,7 @@ func TestParseURI(t *testing.T) {
 		filename string
 	}{
 		{
-			uri:      "s3://my-bucket.s3-us-west-1.amazonaws.com/path/to/file",
+			uri:      "s3://my-bucket.s3.us-west-1.amazonaws.com/path/to/file",
 			bucket:   "my-bucket",
 			region:   "us-west-1",
 			key:      "path/to/file",
