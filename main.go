@@ -32,7 +32,7 @@ func main() {
 		// Called outside of apt to download a file
 	} else if *downloadUri != "" {
 		if match, _ := regexp.MatchString("s3://.*\\.s3.*\\.amazonaws\\.com/.*", *downloadUri); !match {
-			log.Fatalf("Incorrect bucket format.\nExpected: s3://<bucket>.s3-<region>.amazonaws.com/path/to/file\n")
+			log.Fatalf("Incorrect bucket format.\nExpected: s3://<bucket>.s3.<region>.amazonaws.com/path/to/file\n")
 		} else {
 			filename, err := m.Downloader.DownloadFile(*downloadUri, *downloadPath)
 			if err != nil {

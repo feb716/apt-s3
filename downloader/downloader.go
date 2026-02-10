@@ -36,19 +36,16 @@ func (d *Downloader) loadCredentials(region string) (aws.Config, error) {
 	return cfg, err
 }
 
-// parseUri takes an S3 URI s3://<bucket>.s3-<region>.amazonaws.com/key/file
+// parseUri takes an S3 URI s3://<bucket>.s3.<region>.amazonaws.com/key/file
 // and returns the bucket, region, key, and filename
 func (d *Downloader) parseURI(keyString string) (string, string, string, string) {
-	var region string
 	ss := strings.Split(keyString, "/")
 	bucketSs := strings.Split(ss[2], ".")
 	bucket := bucketSs[0]
-	regionSs := strings.Split(bucketSs[1], "-")
+	region := bucketSs[2]
 	// Default to us-east-1 if just <bucket>.s3.amazonaws.com is passed
-	if len(regionSs) == 1 {
+	if region == "amazonaws" {
 		region = "us-east-1"
-	} else {
-		region = strings.Join(regionSs[1:], "-")
 	}
 	key := strings.Join(ss[3:], "/")
 	filename := ss[len(ss)-1]
